@@ -151,3 +151,26 @@ LOGGING = {
         "django.request": {"handlers": ["console"], "level": "ERROR", "propagate": False},
     },
 }
+
+
+ALLOWED_HOSTS = [
+    ".vercel.app",
+    "agenda-backend-tau.vercel.app",
+]
+
+CSRF_TRUSTED_ORIGINS = [
+    "https://agenda-backend-tau.vercel.app",
+    "https://agenda-frontend-gamma.vercel.app",
+]
+
+CORS_ALLOWED_ORIGINS = [
+    "https://agenda-frontend-gamma.vercel.app",
+]
+
+SECURE_PROXY_SSL_HEADER = (
+    "HTTP_X_FORWARDED_PROTO",
+    "https",
+)
+
+SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SECURE = True
