@@ -2,7 +2,6 @@ from pathlib import Path
 
 import environ
 
-
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 env = environ.Env(
@@ -29,7 +28,12 @@ INSTALLED_APPS = [
     "corsheaders",
     "drf_spectacular",
 
-    "apps.users",
+    "apps.companies.apps.CompaniesConfig",
+    "apps.users.apps.UsersConfig",
+    "apps.advisors.apps.AdvisorsConfig",
+    "apps.clients.apps.ClientsConfig",
+    "apps.scheduling.apps.SchedulingConfig",
+    "apps.integrations.apps.IntegrationsConfig",
 ]
 
 MIDDLEWARE = [
@@ -94,13 +98,22 @@ USE_TZ = True
 STATIC_URL = "static/"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+AUTH_USER_MODEL = "users.User"
 
 REST_FRAMEWORK = {
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework.authentication.SessionAuthentication",
+        "rest_framework.authentication.BasicAuthentication",
+    ],
+    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+    "PAGE_SIZE": 50,
+    "EXCEPTION_HANDLER": "apps.scheduling.exceptions.api_exception_handler",
 }
 
 SPECTACULAR_SETTINGS = {
-    "TITLE": "Mi Backend API",
-    "DESCRIPTION": "Documentación de la API",
+    "TITLE": "Agenda Inmobiliaria API",
+    "DESCRIPTION": "API multiempresa de agenda inmobiliaria.",
     "VERSION": "1.0.0",
 }
