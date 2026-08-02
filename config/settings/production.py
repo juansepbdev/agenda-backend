@@ -37,7 +37,14 @@ DJANGO_DOMAIN = env("DJANGO_DOMAIN", default="")  # noqa: F405
 if DJANGO_DOMAIN and DJANGO_DOMAIN not in ALLOWED_HOSTS:
     ALLOWED_HOSTS.append(DJANGO_DOMAIN)
 
+ALLOWED_HOSTS = [
+    "agenda-backend-tau.vercel.app",
+    ".vercel.app",
+]
 
+CSRF_TRUSTED_ORIGINS = [
+    "https://agenda-backend-tau.vercel.app",
+]
 # -----------------------------------------------------------------------------
 # Base de datos PostgreSQL / Supabase
 # -----------------------------------------------------------------------------
@@ -90,14 +97,6 @@ SECURE_HSTS_PRELOAD = USE_HTTPS
 
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = "DENY"
-
-# Source - https://stackoverflow.com/a/41444706
-# Posted by smack
-# Retrieved 2026-08-02, License - CC BY-SA 3.0
-
-SESSION_COOKIE_SECURE = False
-CSRF_COOKIE_SECURE = False
-SECURE_SSL_REDIRECT = False
 
 
 # -----------------------------------------------------------------------------

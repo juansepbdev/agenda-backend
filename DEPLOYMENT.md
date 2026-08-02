@@ -160,6 +160,20 @@ Cómo encajan:
 - `build_files.sh` genera `staticfiles_build/static/` y Vercel lo publica como salida estática
   (`distDir: staticfiles_build`), de forma que los archivos quedan bajo `/static/...`.
 
+> El Python del builder de Vercel está gestionado por **uv** y marcado como *externally
+> managed* (PEP 668). Un `pip install -r requirements.txt` a secas falla con
+> `error: externally-managed-environment`. Por eso `build_files.sh` intenta, en orden:
+> `uv pip install --system` → virtualenv aislado → `pip --break-system-packages`.
+
+Al usar `builds` en `vercel.json`, Vercel muestra este aviso, que es **esperado**:
+
+```
+WARNING! Due to `builds` existing in your configuration file, the Build and
+Development Settings defined in your Project Settings will not apply.
+```
+
+Significa que el *Build Command* del dashboard se ignora en favor de `build_files.sh`.
+
 ### Variables de entorno en Vercel
 
 En **Project Settings → Environment Variables**, para *Production* (y *Preview* si aplica):
@@ -285,6 +299,8 @@ y en local (HTTP) sin duplicar settings.
 | CORS bloqueado en el navegador | Origen no permitido | Definir `FRONTEND_URL` o `CORS_ALLOWED_ORIGINS` |
 | `password authentication failed` con `DATABASE_URL` | Caracteres especiales sin codificar | Usar las variables `DB_*` sueltas |
 | `500` en `/admin/` en Vercel, sin CSS | `collectstatic` no corrió | Revisar el log del build de `build_files.sh` |
+| Build de Vercel: `error: externally-managed-environment` | `pip install` sobre el Python gestionado por uv (PEP 668) | Ya cubierto por `build_files.sh`; no volver a poner un `pip install` pelado |
+| Build de Vercel: `Command "./build_files.sh" exited with 1` | Falta `SECRET_KEY` o `DJANGO_ENV` en el entorno de **build** | Definirlas en Environment Variables sin marcarlas como runtime-only |
 | `no such table: ...` | Migraciones sin aplicar en Supabase | `DJANGO_ENV=production python manage.py migrate` |
 
 ---
