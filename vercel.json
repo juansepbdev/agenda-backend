@@ -8,7 +8,15 @@
   },
   "rewrites": [
     {
-      "source": "/(.*)",
+      "source": "/api/:path*",
+      "destination": "/api/index.py"
+    },
+    {
+      "source": "/admin/:path*",
+      "destination": "/api/index.py"
+    },
+    {
+      "source": "/:path*",
       "destination": "/api/index.py"
     }
   ]
