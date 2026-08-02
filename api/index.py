@@ -22,3 +22,14 @@ application = get_wsgi_application()
 
 # Vercel espera `app`.
 app = application
+
+import os
+
+os.environ.setdefault(
+    "DJANGO_SETTINGS_MODULE",
+    "config.settings.production",
+)
+
+from config.wsgi import application
+
+app = application
