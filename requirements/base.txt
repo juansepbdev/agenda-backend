@@ -1,6 +1,9 @@
 Django
 djangorestframework
+djangorestframework-simplejwt
 django-environ
 django-cors-headers
 drf-spectacular
+dj-database-url
 psycopg[binary]
+whitenoise

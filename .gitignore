@@ -11,10 +11,13 @@ venv/
 .env
 .env.local
 .env.production
+!.env.local.example
+!.env.production.example
 
 # Django
 db.sqlite3
 staticfiles/
+staticfiles_build/
 media/
 
 # IDE
@@ -28,3 +31,7 @@ media/
 .coverage
 htmlcov/
 .pytest_cache/
+.ruff_cache/
+
+# Vercel
+.vercel/

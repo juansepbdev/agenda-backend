@@ -1,0 +1,27 @@
+# Entornos virtuales
+venv/
+.venv/
+
+# Secretos: en Vercel las variables se definen en el dashboard
+.env
+.env.*
+!.env.example
+!.env.local.example
+!.env.production.example
+
+# Base de datos local (el filesystem de Vercel es de solo lectura)
+db.sqlite3
+
+# Caches y artefactos
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# No hace falta en el runtime
+docs/
+.git/
+.vscode/
+.idea/

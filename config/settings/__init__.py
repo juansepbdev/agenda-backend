@@ -1,12 +1,10 @@
-from pathlib import Path
-from dotenv import load_dotenv
-import os
+"""Paquete de settings.
 
-BASE_DIR = Path(__file__).resolve().parent.parent.parent
+No definas settings aquí. Usa uno de los módulos concretos:
 
-env = os.getenv("DJANGO_ENV", "local")
+    config.settings.local       -> desarrollo (SQLite, DEBUG=True)
+    config.settings.production  -> producción (PostgreSQL/Supabase, Vercel)
 
-if env == "production":
-    load_dotenv(BASE_DIR / ".env.production")
-else:
-    load_dotenv(BASE_DIR / ".env.local")
+`manage.py`, `config/wsgi.py` y `config/asgi.py` eligen el módulo
+automáticamente según la variable de entorno ``DJANGO_ENV``.
+"""
