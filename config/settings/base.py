@@ -82,8 +82,11 @@ TEMPLATES = [
     },
 ]
 
+# Vercel ejecuta manage.py para descubrir el entrypoint y, si están definidos
+# ASGI_APPLICATION y WSGI_APPLICATION a la vez, elige el ASGI. Aquí se declara
+# solo el WSGI a propósito: es el modo en el que corre el proyecto.
+# `config/asgi.py` sigue existiendo para uso local, pero no se anuncia.
 WSGI_APPLICATION = "config.wsgi.application"
-ASGI_APPLICATION = "config.asgi.application"
 
 DATABASES = {
     "default": env.db(
@@ -117,21 +120,20 @@ USE_TZ = True
 # -----------------------------------------------------------------------------
 # Archivos estáticos
 # -----------------------------------------------------------------------------
-# STATIC_ROOT termina en `staticfiles_build/static` a propósito: en Vercel el
-# directorio `staticfiles_build` se publica como salida estática, de forma que
-# los archivos quedan servidos por la CDN bajo la ruta `/static/...`.
+# Al detectar STATIC_ROOT, Vercel ejecuta `collectstatic` durante el build y
+# sirve el resultado desde su CDN bajo STATIC_URL. WhiteNoise queda activo solo
+# fuera de Vercel (gunicorn en local, `vercel dev`).
 
 STATIC_URL = "/static/"
-STATIC_ROOT = BASE_DIR / "staticfiles_build" / "static"
+STATIC_ROOT = BASE_DIR / "staticfiles"
 
 STORAGES = {
     "default": {
         "BACKEND": "django.core.files.storage.FileSystemStorage",
     },
     "staticfiles": {
-        # Sin manifiesto: el lambda de Vercel no contiene `staticfiles_build`,
-        # así que un ManifestStaticFilesStorage fallaría al renderizar plantillas.
-        "BACKEND": "whitenoise.storage.CompressedStaticFilesStorage",
+        # Backend soportado explícitamente por el preset de Django de Vercel.
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
     },
 }
 

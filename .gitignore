@@ -17,7 +17,6 @@ venv/
 # Django
 db.sqlite3
 staticfiles/
-staticfiles_build/
 media/
 
 # IDE
@@ -35,6 +34,3 @@ htmlcov/
 
 # Vercel
 .vercel/
-
-# Vercel build
-.vercel_build_venv/

@@ -16,9 +16,20 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import include, path
+from django.views.generic import RedirectView
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
 urlpatterns = [
+    # Solo la ruta vacía redirige al admin. No es un catch-all, así que
+    # /api/..., /admin/ y /static/ no se ven afectados.
+    path(
+        "",
+        RedirectView.as_view(
+            url="/admin/",
+            permanent=False,
+        ),
+        name="home",
+    ),
     path('admin/', admin.site.urls),
     path("api/v1/companies/", include("apps.companies.urls")),
     path("api/v1/", include("apps.users.urls")),

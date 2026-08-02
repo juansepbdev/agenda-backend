@@ -8,25 +8,34 @@ Sirve para dos escenarios:
    -> `USE_HTTPS=True` (valor por defecto).
 """
 
+from django.core.exceptions import ImproperlyConfigured
+
 from .base import *  # noqa: F401,F403
 
 DEBUG = False
+
+# Dominio de producción en Vercel.
+VERCEL_DOMAIN = "agenda-backend-tau.vercel.app"
 
 
 # -----------------------------------------------------------------------------
 # Hosts permitidos
 # -----------------------------------------------------------------------------
+# Se parte de la variable de entorno y se añaden los dominios conocidos, en vez
+# de sobreescribir la lista: así sigue funcionando `gunicorn` en local.
+# Nunca se usa ALLOWED_HOSTS = ["*"].
 
 ALLOWED_HOSTS = env.list(  # noqa: F405
     "ALLOWED_HOSTS",
     default=["localhost", "127.0.0.1", "0.0.0.0"],
 )
 
-# Cualquier deployment de Vercel (previews incluidos).
-if ".vercel.app" not in ALLOWED_HOSTS:
-    ALLOWED_HOSTS.append(".vercel.app")
+for _host in (VERCEL_DOMAIN, ".vercel.app"):
+    if _host not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(_host)
 
-# Vercel expone el dominio del deployment actual en estas variables.
+# Vercel expone el dominio del deployment actual en estas variables
+# (útil para los deployments de preview, que tienen un subdominio distinto).
 for _var in ("VERCEL_URL", "VERCEL_BRANCH_URL", "VERCEL_PROJECT_PRODUCTION_URL"):
     _host = env(_var, default="")  # noqa: F405
     if _host and _host not in ALLOWED_HOSTS:
@@ -37,38 +46,37 @@ DJANGO_DOMAIN = env("DJANGO_DOMAIN", default="")  # noqa: F405
 if DJANGO_DOMAIN and DJANGO_DOMAIN not in ALLOWED_HOSTS:
     ALLOWED_HOSTS.append(DJANGO_DOMAIN)
 
-ALLOWED_HOSTS = [
-    "agenda-backend-tau.vercel.app",
-    ".vercel.app",
-]
 
-CSRF_TRUSTED_ORIGINS = [
-    "https://agenda-backend-tau.vercel.app",
-]
 # -----------------------------------------------------------------------------
 # Base de datos PostgreSQL / Supabase
 # -----------------------------------------------------------------------------
-# Dos formas de configurarla, en este orden de prioridad:
-#   1. Variables sueltas DB_NAME / DB_USER / DB_PASSWORD / DB_HOST / DB_PORT
-#      (recomendado si la contraseña tiene caracteres especiales: ! % @ / #).
-#   2. DATABASE_URL en formato postgresql://usuario:password@host:puerto/base
-#      (la contraseña debe ir URL-encoded).
+# Se configura con variables sueltas (DB_NAME / DB_USER / DB_PASSWORD / DB_HOST /
+# DB_PORT) en vez de una DATABASE_URL, porque la contraseña de Supabase lleva
+# caracteres que en una URL habría que codificar (! % @ / #), y un olvido ahí
+# produce un "password authentication failed" difícil de diagnosticar.
 
 _DB_HOST = env("DB_HOST", default="")  # noqa: F405
 
-if _DB_HOST:
-    DATABASES = {
-        "default": {
-            "ENGINE": "django.db.backends.postgresql",
-            "NAME": env("DB_NAME", default="postgres"),  # noqa: F405
-            "USER": env("DB_USER"),  # noqa: F405
-            "PASSWORD": env("DB_PASSWORD"),  # noqa: F405
-            "HOST": _DB_HOST,
-            "PORT": env("DB_PORT", default="6543"),  # noqa: F405
-            "OPTIONS": {"sslmode": env("DB_SSLMODE", default="require")},  # noqa: F405
-        }
-    }
+if not _DB_HOST:
+    # Sin esto, DATABASES se quedaría con el SQLite heredado de base.py y
+    # producción arrancaría contra un filesystem de solo lectura en Vercel.
+    raise ImproperlyConfigured(
+        "DB_HOST es obligatorio en producción. Define DB_NAME, DB_USER, "
+        "DB_PASSWORD, DB_HOST y DB_PORT en .env.production (local) o en las "
+        "Environment Variables del proyecto en Vercel."
+    )
 
+DATABASES = {
+    "default": {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": env("DB_NAME", default="postgres"),  # noqa: F405
+        "USER": env("DB_USER"),  # noqa: F405
+        "PASSWORD": env("DB_PASSWORD"),  # noqa: F405
+        "HOST": _DB_HOST,
+        "PORT": env("DB_PORT", default="6543"),  # noqa: F405
+        "OPTIONS": {"sslmode": env("DB_SSLMODE", default="require")},  # noqa: F405
+    }
+}
 
 # El pooler de Supabase en el puerto 6543 es pgbouncer en modo *transaction*:
 # no admite conexiones persistentes ni cursores del lado del servidor.
@@ -108,12 +116,14 @@ BACKEND_URL = env("BACKEND_URL", default="")  # noqa: F405
 
 CSRF_TRUSTED_ORIGINS = env.list(  # noqa: F405
     "CSRF_TRUSTED_ORIGINS",
-    default=["https://*.vercel.app"],
+    default=[],
 )
 
 CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=[])  # noqa: F405
 
-for _origin in (FRONTEND_URL, BACKEND_URL):
+# El dominio propio de Vercel siempre es de confianza: sin esto el login del
+# admin en https://agenda-backend-tau.vercel.app/admin/ falla con error CSRF.
+for _origin in (f"https://{VERCEL_DOMAIN}", "https://*.vercel.app", FRONTEND_URL, BACKEND_URL):
     if _origin and _origin not in CSRF_TRUSTED_ORIGINS:
         CSRF_TRUSTED_ORIGINS.append(_origin)
 

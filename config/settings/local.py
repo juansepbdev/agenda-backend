@@ -34,3 +34,13 @@ SESSION_COOKIE_SECURE = False
 CSRF_COOKIE_SECURE = False
 
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+
+# En desarrollo se sirve con los finders, sin manifiesto: con
+# CompressedManifestStaticFilesStorage habría que correr `collectstatic` antes
+# de cada `runserver` o `{% static %}` lanzaría "Missing staticfiles manifest entry".
+STORAGES = {
+    **STORAGES,  # noqa: F405
+    "staticfiles": {
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+    },
+}
