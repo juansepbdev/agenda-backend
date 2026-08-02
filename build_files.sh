@@ -14,7 +14,7 @@ set -euo pipefail
 export DJANGO_ENV="${DJANGO_ENV:-production}"
 export DJANGO_SETTINGS_MODULE="config.settings.production"
 
-PYTHON_BIN="python3"
+PYTHON_BIN="python3.12"
 
 if command -v uv >/dev/null 2>&1; then
     echo "==> Instalando dependencias con uv"
