@@ -35,3 +35,6 @@ htmlcov/
 
 # Vercel
 .vercel/
+
+# Vercel build
+.vercel_build_venv/
