@@ -8,4 +8,4 @@ export DJANGO_SETTINGS_MODULE="config.settings.production"
 echo "==> Ejecutando collectstatic"
 python manage.py collectstatic --noinput --clear
 
-echo "==> Build completado correctamente"
+echo "==> Build completado"

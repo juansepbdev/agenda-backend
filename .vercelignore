@@ -13,6 +13,7 @@ venv/
 db.sqlite3
 
 # Caches y artefactos
+.vercel_build_venv/
 __pycache__/
 *.py[cod]
 .pytest_cache/
