@@ -51,6 +51,7 @@ INSTALLED_APPS = [
     "apps.clients.apps.ClientsConfig",
     "apps.scheduling.apps.SchedulingConfig",
     "apps.integrations.apps.IntegrationsConfig",
+    "apps.inbox.apps.InboxConfig",
 ]
 
 MIDDLEWARE = [
@@ -151,6 +152,20 @@ REST_FRAMEWORK = {
     "PAGE_SIZE": 50,
     "EXCEPTION_HANDLER": "apps.scheduling.exceptions.api_exception_handler",
 }
+
+# -----------------------------------------------------------------------------
+# Inbox WhatsApp (CRM conversacional)
+# -----------------------------------------------------------------------------
+# Las credenciales (API key de YCloud, número remitente, webhook de n8n) NO
+# viven aquí: son por empresa y se guardan en `inbox.WhatsAppChannel`. Estas
+# variables solo fijan los valores por defecto de infraestructura.
+
+INBOX_YCLOUD_API_BASE = env("YCLOUD_API_BASE", default="https://api.ycloud.com/v2")
+INBOX_YCLOUD_TIMEOUT = env.float("YCLOUD_TIMEOUT", default=30.0)
+
+# Ruta punteada a un callable `(company_id, event, payload) -> None` que difunda
+# los eventos en vivo (Channels, Redis pub/sub, SSE...). Vacío = solo polling.
+INBOX_REALTIME_BACKEND = env("INBOX_REALTIME_BACKEND", default="")
 
 SPECTACULAR_SETTINGS = {
     "TITLE": "Agenda Inmobiliaria API",
