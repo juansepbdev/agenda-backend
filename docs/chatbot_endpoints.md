@@ -1,6 +1,6 @@
 # API para chatbot
 
-Base URL: `https://api.tu-dominio.com/api/v1/integrations/chatbot`. La empresa se determina exclusivamente con la identidad autenticada; **no se acepta `company_id`** en ningún payload. Actualmente el proyecto usa Basic Auth como mecanismo disponible; antes de conectar un proveedor externo, sustituirlo por una API key, firma HMAC o token de integración por empresa.
+Base URL: `https://api.tu-dominio.com/api/v1/integrations/chatbot`. Este documento cubre **agendar visitas**; para leer y escribir mensajes del CRM conversacional, ver [chatbot_messages.md](chatbot_messages.md). La empresa se determina exclusivamente con la identidad autenticada; **no se acepta `company_id`** en ningún payload. Actualmente el proyecto usa Basic Auth como mecanismo disponible; antes de conectar un proveedor externo, sustituirlo por una API key, firma HMAC o token de integración por empresa.
 
 Todas las fechas deben incluir zona horaria ISO-8601, por ejemplo `2026-08-10T15:00:00-05:00`.
 

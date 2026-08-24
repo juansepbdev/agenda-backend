@@ -12,6 +12,7 @@ from django.db.models import F, Max
 from django.utils import timezone
 
 from apps.clients.models import Client
+from apps.scheduling.exceptions import DomainError
 
 from ..exceptions import (
     ChatbotEnabledError,
@@ -507,3 +508,286 @@ def forward_inbound_to_n8n(*, channel, payload: dict, processed: list[dict]) -> 
     if not any(item["chatbot_enabled"] and not item["duplicate"] for item in processed):
         return None
     return n8n.forward_ycloud_event(channel, payload)
+
+
+# -----------------------------------------------------------------------------
+# Persistencia directa — POST /inbox/messages/
+# -----------------------------------------------------------------------------
+# `ingest_inbound_text` y `send_agent_message` modelan flujos completos: el
+# primero acusa un entrante real, el segundo despacha a WhatsApp. Este bloque
+# cubre el tercer caso: **solo escribir** en el historial un mensaje que ya
+# ocurrió en otro sitio (el agente de n8n, una migración, una prueba). No llama
+# a YCloud ni reenvía a n8n; por eso no aplica R1 (el interruptor del chatbot
+# regula quién *puede enviar*, no quién puede *registrar lo ya enviado*).
+
+SENDER_DIRECTION = {
+    Message.Sender.CONTACT: Message.Type.INBOUND,
+    Message.Sender.BOT: Message.Type.OUTBOUND,
+    Message.Sender.AGENT: Message.Type.OUTBOUND,
+}
+
+SENDER_ASSIGNMENT = {
+    Message.Sender.AGENT: Conversation.Assignment.ME,
+    Message.Sender.BOT: Conversation.Assignment.BOT,
+}
+
+DEFAULT_STATUS = {
+    Message.Type.INBOUND: Message.Status.RECEIVED,
+    Message.Type.OUTBOUND: Message.Status.SENT,
+}
+
+DIRECTION_ALIASES = {
+    "inbound": Message.Type.INBOUND,
+    "in": Message.Type.INBOUND,
+    "incoming": Message.Type.INBOUND,
+    "received": Message.Type.INBOUND,
+    "0": Message.Type.INBOUND,
+    "outbound": Message.Type.OUTBOUND,
+    "out": Message.Type.OUTBOUND,
+    "outgoing": Message.Type.OUTBOUND,
+    "sent": Message.Type.OUTBOUND,
+    "1": Message.Type.OUTBOUND,
+}
+
+MAX_BATCH_SIZE = 200
+
+
+def _coerce_choice(value, choices, field: str):
+    """Normaliza a minúsculas y valida contra un `TextChoices`."""
+    normalized = str(value).strip().lower()
+    valid = {choice.value for choice in choices}
+    if normalized not in valid:
+        raise InboxValidationError(
+            f"`{field}` inválido.", details={"received": value, "allowed": sorted(valid)}
+        )
+    return normalized
+
+
+def _coerce_direction(value, sender_type):
+    """Dirección explícita si viene; si no, la que implica el remitente.
+
+    Una combinación incoherente (`contact` + `outbound`) se rechaza en vez de
+    corregirse: un histórico con la dirección mal puesta arruina toda la
+    analítica posterior, y es preferible que falle en la escritura.
+    """
+    implied = SENDER_DIRECTION[sender_type]
+    if value in (None, ""):
+        return implied
+
+    key = str(value).strip().lower()
+    if key not in DIRECTION_ALIASES:
+        raise InboxValidationError(
+            "`direction` inválida.",
+            details={"received": value, "allowed": ["inbound", "outbound"]},
+        )
+
+    direction = DIRECTION_ALIASES[key]
+    if direction != implied:
+        raise InboxValidationError(
+            "`direction` no concuerda con `sender_type`.",
+            details={"sender_type": sender_type, "direction": key},
+        )
+    return direction
+
+
+def store_message(
+    *,
+    company,
+    content,
+    phone=None,
+    conversation_id=None,
+    name="",
+    sender_type=None,
+    direction=None,
+    status=None,
+    content_type=None,
+    wa_message_id=None,
+    timestamp=None,
+    channel=None,
+    mark_unread=None,
+) -> dict:
+    """Guarda un mensaje en el historial. Idempotente por `wa_message_id`.
+
+    La conversación se resuelve por `conversation_id` (si viene) o por
+    `phone`, creando contacto y conversación cuando hace falta.
+    """
+    body = (content or "").strip()
+    if not body:
+        raise InboxValidationError("El contenido del mensaje es obligatorio.")
+
+    sender = (
+        Message.Sender.CONTACT
+        if sender_type in (None, "")
+        else _coerce_choice(sender_type, Message.Sender, "sender_type")
+    )
+    message_type = _coerce_direction(direction, sender)
+    message_status = (
+        DEFAULT_STATUS[message_type]
+        if status in (None, "")
+        else _coerce_choice(status, Message.Status, "status")
+    )
+    kind = (
+        Message.ContentType.TEXT
+        if content_type in (None, "")
+        else _coerce_choice(content_type, Message.ContentType, "content_type")
+    )
+
+    if not conversation_id and not phone:
+        raise InboxValidationError("Indica `conversation_id` o `phone`.")
+
+    if wa_message_id:
+        existing = (
+            Message.objects.select_related("conversation__contact")
+            .filter(company=company, wa_message_id=wa_message_id)
+            .first()
+        )
+        if existing:
+            conversation = existing.conversation
+            return {
+                "duplicate": True,
+                "contact_id": str(conversation.contact_id),
+                "conversation_id": str(conversation.id),
+                "display_id": conversation.display_id,
+                "chatbot_enabled": conversation.contact.chatbot_enabled,
+                "message": serialize_message(existing),
+                "conversation": serialize_conversation(conversation),
+            }
+
+    is_inbound = message_type == Message.Type.INBOUND
+    bump_unread = is_inbound if mark_unread is None else bool(mark_unread)
+    moment = timestamp or timezone.now()
+
+    with transaction.atomic():
+        if conversation_id:
+            conversation = _get_conversation(company, conversation_id)
+            contact = conversation.contact
+        else:
+            contact, conversation = get_or_create_contact_conversation(
+                company=company, phone=phone, name=name or "", channel=channel
+            )
+
+        after_id = _last_message_id(conversation)
+
+        message = Message.objects.create(
+            company_id=company.pk,
+            conversation=conversation,
+            contact=contact,
+            content=body,
+            message_type=message_type,
+            sender_type=sender,
+            status=message_status,
+            content_type=kind,
+            wa_message_id=wa_message_id or None,
+        )
+        if timestamp:
+            # `created_at` es auto_now_add; se reescribe con la hora real del
+            # origen para que las series temporales del dashboard cuadren.
+            Message.objects.filter(pk=message.pk).update(created_at=moment)
+            message.created_at = moment
+
+        # Los mensajes de sistema son anotaciones: no reasignan la conversación.
+        assignment = None if kind == Message.ContentType.SYSTEM else SENDER_ASSIGNMENT.get(sender)
+        if is_inbound and contact.chatbot_enabled:
+            assignment = Conversation.Assignment.BOT
+
+        _touch_conversation(
+            conversation, content=body, moment=moment, assignment=assignment, bump_unread=bump_unread
+        )
+
+        if is_inbound and (contact.last_contact_at is None or contact.last_contact_at < moment):
+            contact.last_contact_at = moment
+            contact.save(update_fields=["last_contact_at", "updated_at"])
+
+    realtime.broadcast_messages_updated(
+        company_id=company.pk,
+        conversation_id=conversation.id,
+        after_id=after_id,
+        display_id=conversation.display_id,
+    )
+    realtime.broadcast_conversations_changed(company_id=company.pk)
+
+    return {
+        "duplicate": False,
+        "contact_id": str(contact.id),
+        "conversation_id": str(conversation.id),
+        "display_id": conversation.display_id,
+        "chatbot_enabled": contact.chatbot_enabled,
+        "message": serialize_message(message),
+        "conversation": serialize_conversation(conversation),
+    }
+
+
+def store_from_payload(*, company, data: dict, channel=None) -> dict:
+    """Punto de entrada del endpoint: traduce el cuerpo HTTP y guarda."""
+    return store_message(company=company, channel=channel, **_store_kwargs(data))
+
+
+def store_messages(*, company, items, channel=None) -> dict:
+    """Escritura por lotes. Un elemento inválido no tumba a los demás.
+
+    Cada fallo se devuelve con su índice y el mismo envoltorio de error del
+    resto de la API, para que el emisor pueda reintentar solo lo que falló.
+    """
+    if not isinstance(items, list):
+        raise InboxValidationError("`messages` debe ser una lista.")
+    if not items:
+        raise InboxValidationError("`messages` no puede venir vacío.")
+    if len(items) > MAX_BATCH_SIZE:
+        raise InboxValidationError(
+            f"Máximo {MAX_BATCH_SIZE} mensajes por lote.", details={"received": len(items)}
+        )
+
+    stored, errors = [], []
+    for index, item in enumerate(items):
+        if not isinstance(item, dict):
+            errors.append({"index": index, "error": {
+                "code": InboxValidationError.code,
+                "message": "Cada elemento debe ser un objeto JSON.",
+                "details": {},
+            }})
+            continue
+        try:
+            stored.append({"index": index, **store_message(company=company, channel=channel, **_store_kwargs(item))})
+        except DomainError as exc:
+            errors.append({"index": index, "error": {
+                "code": exc.code,
+                "message": exc.message,
+                "details": getattr(exc, "details", {}) or {},
+            }})
+
+    return {
+        "stored": stored,
+        "errors": errors,
+        "counts": {
+            "received": len(items),
+            "created": sum(1 for item in stored if not item["duplicate"]),
+            "duplicated": sum(1 for item in stored if item["duplicate"]),
+            "failed": len(errors),
+        },
+    }
+
+
+def _store_kwargs(data: dict) -> dict:
+    """Traduce el cuerpo HTTP a los argumentos de `store_message`.
+
+    Se aceptan alias (`text`, `body`, `phone_number`, `type`) porque los nodos
+    de n8n y la referencia técnica no usan los mismos nombres.
+    """
+    return {
+        "phone": data.get("phone") or data.get("phone_number") or None,
+        "conversation_id": data.get("conversation_id") or None,
+        "content": data.get("content") or data.get("text") or data.get("body") or "",
+        "name": data.get("name") or "",
+        "sender_type": data.get("sender_type") or data.get("sender"),
+        "direction": data.get("direction"),
+        "status": data.get("status"),
+        "content_type": data.get("content_type") or data.get("type"),
+        "wa_message_id": data.get("wa_message_id") or data.get("wamid") or None,
+        "timestamp": _parse_optional_timestamp(data.get("timestamp") or data.get("created_at")),
+        "mark_unread": data.get("mark_unread"),
+    }
+
+
+def _parse_optional_timestamp(value):
+    """`None` si no viene: así `created_at` conserva su `auto_now_add`."""
+    return None if value in (None, "") else parse_wa_timestamp(value)

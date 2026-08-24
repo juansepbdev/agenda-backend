@@ -23,7 +23,7 @@ from rest_framework.decorators import (
     authentication_classes,
     permission_classes,
 )
-from rest_framework.exceptions import ParseError
+from rest_framework.exceptions import NotAuthenticated, ParseError
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
@@ -74,6 +74,26 @@ def _int_param(request, name, default=None):
         return int(raw)
     except (TypeError, ValueError):
         return default
+
+
+def _company_and_channel(request):
+    """Resuelve el tenant por credencial de canal o, si no la hay, por sesión.
+
+    El orden importa: si llega `X-API-Key` manda la credencial, aunque la
+    petición traiga además una cookie de sesión. Así un mismo endpoint sirve al
+    panel y al flujo de n8n sin que la identidad de uno pueda suplantar la del
+    otro.
+    """
+    has_credential = bool(request.headers.get("X-API-Key") or request.query_params.get("api_key"))
+    if has_credential:
+        channel = _channel_from_credential(request)
+        return channel.company, channel
+
+    if not request.user or not request.user.is_authenticated:
+        raise NotAuthenticated("Autentícate con sesión o con la cabecera X-API-Key del canal.")
+
+    company = _company(request)
+    return company, _channel_of(company)
 
 
 def _payload(request):
@@ -312,3 +332,35 @@ def n8n_bot_reply(request):
     )
     status_code = 201 if result["status"] == "ok" else 200
     return Response(result, status=status_code)
+
+
+@extend_schema(
+    summary="Guarda uno o varios mensajes en el historial, sin enviarlos a WhatsApp.",
+    description=(
+        "Persistencia pura: no llama a YCloud ni reenvía a n8n. Autentica con "
+        "sesión del panel o con la cabecera `X-API-Key` del canal. Idempotente "
+        "por `wa_message_id` dentro de la empresa. Para un lote, envía "
+        "`{\"messages\": [...]}` (máximo 200)."
+    ),
+    request=OpenApiTypes.OBJECT,
+    responses=OpenApiTypes.OBJECT,
+)
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def message_store(request):
+    """`POST /inbox/messages/` — registra en el historial lo ya ocurrido fuera."""
+    company, channel = _company_and_channel(request)
+
+    if not company.can_operate:
+        raise CompanyInactiveError("La empresa no está activa.")
+
+    data = _payload(request)
+
+    if "messages" in data:
+        result = messaging.store_messages(company=company, items=data["messages"], channel=channel)
+        # 207: el lote puede tener éxitos y fallos a la vez y ambos importan.
+        status_code = 207 if result["errors"] else 201
+        return Response(result, status=status_code)
+
+    result = messaging.store_from_payload(company=company, data=data, channel=channel)
+    return Response(result, status=200 if result["duplicate"] else 201)

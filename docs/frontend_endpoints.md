@@ -1,6 +1,6 @@
 # Endpoints para frontend
 
-Base URL: `https://api.tu-dominio.com/api/v1`. Los endpoints internos requieren una sesión Django o Basic Auth. No envíes `company_id`: el backend obtiene la empresa de la persona autenticada. Las respuestas paginadas de listados siguen el formato DRF (`count`, `next`, `previous`, `results`).
+Base URL: `https://api.tu-dominio.com/api/v1`. Los endpoints internos requieren una sesión Django o Basic Auth. No envíes `company_id`: el backend obtiene la empresa de la persona autenticada. Las respuestas paginadas de listados siguen el formato DRF (`count`, `next`, `previous`, `results`). Este documento cubre **agenda y CRM**; para el dashboard de métricas y el inbox en vivo, ver [frontend_dashboard.md](frontend_dashboard.md).
 
 ## Autenticación
 

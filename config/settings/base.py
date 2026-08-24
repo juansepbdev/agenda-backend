@@ -52,6 +52,7 @@ INSTALLED_APPS = [
     "apps.scheduling.apps.SchedulingConfig",
     "apps.integrations.apps.IntegrationsConfig",
     "apps.inbox.apps.InboxConfig",
+    "apps.analytics.apps.AnalyticsConfig",
 ]
 
 MIDDLEWARE = [

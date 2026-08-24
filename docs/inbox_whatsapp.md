@@ -37,6 +37,7 @@ Base `/api/v1/inbox/`. Los internos exigen sesión y resuelven la empresa desde 
 | `GET` | `conversations/<uuid>/messages/` | Cursor: `limit` (1..200, def. 50), `after_id`, `before_id`. Siempre devuelve orden ascendente |
 | `POST` | `conversations/<uuid>/messages/` | Envío del asesor. `{"content": "..."}` → `201` |
 | `POST` | `contacts/<uuid>/chatbot/` | `{"enabled": bool}` |
+| `POST` | `messages/` | **Guardar mensajes** en el historial. Sesión o `X-API-Key`. No envía por WhatsApp |
 | `POST` | `messages/incoming/` | Ingesta manual de pruebas. **No reenvía a n8n** |
 | `GET`/`POST` | `webhook/whatsapp/` | Webhook de YCloud. Sin sesión, credencial de canal |
 | `POST` | `n8n/bot-reply/` | Callback del bot. Sin sesión, credencial de canal |
@@ -45,9 +46,36 @@ Los errores usan el envoltorio del resto de la API: `{"error": {"code", "message
 
 Con la credencial válida, el webhook **siempre responde 200**, incluso si el payload no era procesable (`status: "ignored"`): un error provoca reintentos innecesarios del BSP.
 
+## Guardar mensajes: `POST /api/v1/inbox/messages/`
+
+Tercer camino de entrada al historial y el único que **solo escribe**: no llama
+a YCloud ni reenvía a n8n. Registra lo que ya ocurrió en otro sitio — una
+respuesta que el agente de n8n despachó por su cuenta, una migración desde otro
+CRM, un histórico que rellenar.
+
+Autentica en este orden: si llega `X-API-Key` manda la credencial del canal,
+aunque la petición traiga además una cookie de sesión; si no, se usa la sesión
+del panel. Así el mismo endpoint sirve al dashboard y a n8n sin que una
+identidad pueda suplantar a la otra.
+
+Decisiones de diseño que lo distinguen del resto:
+
+* **Idempotente por `wa_message_id`** dentro de la empresa: repetir devuelve
+  `200` con `duplicate: true`.
+* **Una `direction` incoherente con `sender_type` se rechaza** en vez de
+  corregirse. Un histórico con la dirección mal puesta arruina la analítica
+  posterior, y es preferible que falle al escribir.
+* **No aplica R1.** El interruptor del chatbot regula quién *puede enviar*, no
+  quién puede *registrar lo ya enviado*.
+* **Lotes de hasta 200** con `{"messages": [...]}`: un elemento inválido no
+  tumba a los demás, y se responde `207` con los fallos localizados por índice.
+
+El contrato completo (campos, alias, ejemplos y códigos de error) está en
+[chatbot_messages.md](chatbot_messages.md).
+
 ## Credencial de los webhooks
 
-`/webhook/whatsapp/` y `/n8n/bot-reply/` no usan sesión. La empresa se resuelve **exclusivamente** desde la credencial del canal, nunca desde el cuerpo de la petición: se envía en la cabecera `X-API-Key` o, para paneles de BSP que solo permiten personalizar la URL, en el parámetro `?api_key=` (la cabecera es preferible, un secreto en la URL acaba en los logs del proxy).
+`/webhook/whatsapp/` y `/n8n/bot-reply/` no usan sesión (y `/messages/` la acepta como alternativa). La empresa se resuelve **exclusivamente** desde la credencial del canal, nunca desde el cuerpo de la petición: se envía en la cabecera `X-API-Key` o, para paneles de BSP que solo permiten personalizar la URL, en el parámetro `?api_key=` (la cabecera es preferible, un secreto en la URL acaba en los logs del proxy).
 
 La credencial se guarda **hasheada** (SHA-256); el valor en claro se muestra una sola vez, al generarla:
 
