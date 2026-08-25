@@ -1,0 +1,25 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      # Los settings locales usan SQLite; la clave sólo tiene que existir.
+      SECRET_KEY: ci-secret-key-not-used-anywhere-else
+      DJANGO_ENV: local
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+          cache: pip
+      - run: pip install -r requirements/local.txt
+      - run: ruff check .
+      - run: ruff format --check apps/scheduling apps/advisors apps/clients apps/users apps/integrations
+      - run: python manage.py makemigrations --check --dry-run
+      - run: pytest -q
