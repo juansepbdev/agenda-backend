@@ -22,8 +22,13 @@ class Advisor(CompanyOwnedModel):
     class Meta:
         constraints = [
             models.UniqueConstraint(fields=["company", "code"], name="unique_advisor_code_per_company"),
-            models.CheckConstraint(condition=models.Q(default_event_duration_minutes__gt=0), name="advisor_duration_gt_zero"),
-            models.CheckConstraint(condition=models.Q(max_daily_events__isnull=True) | models.Q(max_daily_events__gt=0), name="advisor_daily_limit_gt_zero"),
+            models.CheckConstraint(
+                condition=models.Q(default_event_duration_minutes__gt=0), name="advisor_duration_gt_zero"
+            ),
+            models.CheckConstraint(
+                condition=models.Q(max_daily_events__isnull=True) | models.Q(max_daily_events__gt=0),
+                name="advisor_daily_limit_gt_zero",
+            ),
         ]
         indexes = [models.Index(fields=["company", "is_active", "is_available"])]
 
@@ -31,7 +36,8 @@ class Advisor(CompanyOwnedModel):
         if self.user_id and self.user.company_id != self.company_id:
             raise ValidationError("El usuario del asesor debe pertenecer a la misma empresa.")
 
-    def __str__(self): return f"{self.code} - {self.user}"
+    def __str__(self):
+        return f"{self.code} - {self.user}"
 
 
 class AdvisorSupervision(CompanyOwnedModel):
@@ -44,11 +50,21 @@ class AdvisorSupervision(CompanyOwnedModel):
     is_active = models.BooleanField(default=True)
 
     class Meta:
-        constraints = [models.UniqueConstraint(fields=["company", "advisor"], condition=models.Q(is_active=True), name="one_active_supervision_per_advisor")]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["company", "advisor"],
+                condition=models.Q(is_active=True),
+                name="one_active_supervision_per_advisor",
+            )
+        ]
         indexes = [models.Index(fields=["company", "supervisor_user", "is_active"])]
 
     def clean(self):
-        if self.supervisor_user.company_id != self.company_id or self.advisor.company_id != self.company_id or self.assigned_by.company_id != self.company_id:
+        if (
+            self.supervisor_user.company_id != self.company_id
+            or self.advisor.company_id != self.company_id
+            or self.assigned_by.company_id != self.company_id
+        ):
             raise ValidationError("Todas las relaciones deben pertenecer a la empresa.")
         if self.supervisor_user.role not in {"SUPERVISOR", "ADMIN"}:
             raise ValidationError("El supervisor debe tener rol supervisor o administrador.")
@@ -72,12 +88,19 @@ class AdvisorAvailability(CompanyOwnedModel):
 
     class Meta:
         constraints = [
-            models.UniqueConstraint(fields=["advisor", "day_of_week", "start_time", "end_time"], name="unique_availability_block"),
-            models.CheckConstraint(condition=models.Q(day_of_week__gte=0) & models.Q(day_of_week__lte=6), name="availability_valid_day"),
+            models.UniqueConstraint(
+                fields=["advisor", "day_of_week", "start_time", "end_time"], name="unique_availability_block"
+            ),
+            models.CheckConstraint(
+                condition=models.Q(day_of_week__gte=0) & models.Q(day_of_week__lte=6), name="availability_valid_day"
+            ),
             models.CheckConstraint(condition=models.Q(slot_duration_minutes__gt=0), name="availability_slot_gt_zero"),
         ]
 
     def clean(self):
-        if self.end_time <= self.start_time: raise ValidationError("La hora final debe ser posterior a la inicial.")
-        if self.advisor_id and self.advisor.company_id != self.company_id: raise ValidationError("El asesor debe pertenecer a la empresa.")
-        if self.configured_by_id and self.configured_by.company_id != self.company_id: raise ValidationError("El configurador debe pertenecer a la empresa.")
+        if self.end_time <= self.start_time:
+            raise ValidationError("La hora final debe ser posterior a la inicial.")
+        if self.advisor_id and self.advisor.company_id != self.company_id:
+            raise ValidationError("El asesor debe pertenecer a la empresa.")
+        if self.configured_by_id and self.configured_by.company_id != self.company_id:
+            raise ValidationError("El configurador debe pertenecer a la empresa.")

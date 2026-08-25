@@ -36,12 +36,18 @@ class User(AbstractUser):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     username = None
-    company = models.ForeignKey("companies.Company", null=True, blank=True, on_delete=models.PROTECT, related_name="users")
+    company = models.ForeignKey(
+        "companies.Company", null=True, blank=True, on_delete=models.PROTECT, related_name="users"
+    )
     email = models.EmailField(unique=True)
     phone = models.CharField(max_length=32, blank=True)
     role = models.CharField(max_length=16, choices=Role.choices, default=Role.ADVISOR)
-    created_by = models.ForeignKey("self", null=True, blank=True, on_delete=models.PROTECT, related_name="created_users")
-    updated_by = models.ForeignKey("self", null=True, blank=True, on_delete=models.PROTECT, related_name="updated_users")
+    created_by = models.ForeignKey(
+        "self", null=True, blank=True, on_delete=models.PROTECT, related_name="created_users"
+    )
+    updated_by = models.ForeignKey(
+        "self", null=True, blank=True, on_delete=models.PROTECT, related_name="updated_users"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

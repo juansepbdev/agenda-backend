@@ -14,12 +14,12 @@ class CustomUserAdmin(TenantAdminMixin, UserAdmin):
     ordering = ("email",)
     readonly_fields = ("id", "created_at", "updated_at", "last_login")
     fieldsets = (
-        (None, {"fields": ("email", "password")} ),
-        ("Perfil", {"fields": ("company", "first_name", "last_name", "phone", "role")} ),
-        ("Permisos", {"fields": ("is_active", "is_staff", "is_superuser", "groups", "user_permissions")} ),
-        ("Auditoría", {"fields": ("created_by", "updated_by", "created_at", "updated_at", "last_login")} ),
+        (None, {"fields": ("email", "password")}),
+        ("Perfil", {"fields": ("company", "first_name", "last_name", "phone", "role")}),
+        ("Permisos", {"fields": ("is_active", "is_staff", "is_superuser", "groups", "user_permissions")}),
+        ("Auditoría", {"fields": ("created_by", "updated_by", "created_at", "updated_at", "last_login")}),
     )
-    add_fieldsets = ((None, {"classes": ("wide",), "fields": ("email", "company", "role", "password1", "password2")} ),)
+    add_fieldsets = ((None, {"classes": ("wide",), "fields": ("email", "company", "role", "password1", "password2")}),)
 
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if not request.user.is_superuser and db_field.name in {"created_by", "updated_by"}:
