@@ -12,9 +12,23 @@ class UserSerializer(serializers.ModelSerializer):
         read_only_fields = ("id", "is_active", "created_at")
 
     def create(self, validated_data):
-        password = validated_data.pop("password")
+        # `password` es required=False: hacer pop() sin defecto reventaba con
+        # KeyError (500) al crear un usuario sin contraseña.
+        password = validated_data.pop("password", None)
         actor = self.context["request"].user
-        return User.objects.create_user(company=actor.company, created_by=actor, updated_by=actor, password=password, **validated_data)
+        user = User.objects.create_user(
+            company=actor.company,
+            created_by=actor,
+            updated_by=actor,
+            password=password,
+            **validated_data,
+        )
+        if not password:
+            # Sin contraseña utilizable el usuario existe pero no puede entrar,
+            # que es lo correcto hasta que un admin se la asigne.
+            user.set_unusable_password()
+            user.save(update_fields=["password"])
+        return user
 
     def update(self, instance, validated_data):
         password = validated_data.pop("password", None)

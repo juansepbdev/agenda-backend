@@ -17,6 +17,11 @@ DEBUG = False
 # Dominio de producción en Vercel.
 VERCEL_DOMAIN = "agenda-backend-tau.vercel.app"
 
+# Frontend por defecto. Es sólo un respaldo: si FRONTEND_URL está definida en el
+# entorno, esa manda. Está aquí para que el despliegue actual siga funcionando
+# sin depender de que la variable exista en el dashboard de Vercel.
+DEFAULT_FRONTEND_URL = "https://agenda-frontend-gamma.vercel.app"
+
 
 # -----------------------------------------------------------------------------
 # Hosts permitidos
@@ -123,12 +128,19 @@ CORS_ALLOWED_ORIGINS = env.list("CORS_ALLOWED_ORIGINS", default=[])  # noqa: F40
 
 # El dominio propio de Vercel siempre es de confianza: sin esto el login del
 # admin en https://agenda-backend-tau.vercel.app/admin/ falla con error CSRF.
-for _origin in (f"https://{VERCEL_DOMAIN}", "https://*.vercel.app", FRONTEND_URL, BACKEND_URL):
+for _origin in (
+    f"https://{VERCEL_DOMAIN}",
+    "https://*.vercel.app",
+    FRONTEND_URL,
+    BACKEND_URL,
+    DEFAULT_FRONTEND_URL,
+):
     if _origin and _origin not in CSRF_TRUSTED_ORIGINS:
         CSRF_TRUSTED_ORIGINS.append(_origin)
 
-if FRONTEND_URL and FRONTEND_URL not in CORS_ALLOWED_ORIGINS:
-    CORS_ALLOWED_ORIGINS.append(FRONTEND_URL)
+for _origin in (FRONTEND_URL, DEFAULT_FRONTEND_URL):
+    if _origin and _origin not in CORS_ALLOWED_ORIGINS:
+        CORS_ALLOWED_ORIGINS.append(_origin)
 
 CORS_ALLOW_CREDENTIALS = True
 
@@ -151,26 +163,3 @@ LOGGING = {
         "django.request": {"handlers": ["console"], "level": "ERROR", "propagate": False},
     },
 }
-
-
-ALLOWED_HOSTS = [
-    ".vercel.app",
-    "agenda-backend-tau.vercel.app",
-]
-
-CSRF_TRUSTED_ORIGINS = [
-    "https://agenda-backend-tau.vercel.app",
-    "https://agenda-frontend-gamma.vercel.app",
-]
-
-CORS_ALLOWED_ORIGINS = [
-    "https://agenda-frontend-gamma.vercel.app",
-]
-
-SECURE_PROXY_SSL_HEADER = (
-    "HTTP_X_FORWARDED_PROTO",
-    "https",
-)
-
-SESSION_COOKIE_SECURE = True
-CSRF_COOKIE_SECURE = True
