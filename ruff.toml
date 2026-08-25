@@ -1,13 +1,15 @@
-[tool.ruff]
+# Config de ruff en su propio archivo, NO en pyproject.toml: al detectar un
+# pyproject.toml, Vercel cambia el instalador de pip a uv, y uv aborta el build
+# si el archivo no declara una tabla [project].
+
 line-length = 120
 target-version = "py312"
 # Las migraciones son historial: se dejan tal como Django las generó.
 extend-exclude = ["*/migrations/*"]
 
-[tool.ruff.lint]
+[lint]
 select = ["E", "F", "I", "UP", "B"]
 ignore = ["E501"]  # el formateador ya gobierna la longitud de línea
 
-[tool.ruff.lint.per-file-ignores]
-"*/migrations/*" = ["E501", "I001"]
+[lint.per-file-ignores]
 "config/settings/*.py" = ["F403", "F405"]  # from .base import * es deliberado
