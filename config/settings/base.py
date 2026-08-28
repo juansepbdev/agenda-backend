@@ -149,8 +149,14 @@ REST_FRAMEWORK = {
         "rest_framework.authentication.SessionAuthentication",
         "rest_framework.authentication.BasicAuthentication",
     ],
-    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+    "DEFAULT_PAGINATION_CLASS": "config.pagination.DefaultPagination",
     "PAGE_SIZE": 50,
+    # Activa los `search_fields` / `ordering_fields` ya declarados en los
+    # viewsets. Sin backends de filtrado eran configuración muerta.
+    "DEFAULT_FILTER_BACKENDS": [
+        "rest_framework.filters.SearchFilter",
+        "rest_framework.filters.OrderingFilter",
+    ],
     "EXCEPTION_HANDLER": "apps.scheduling.exceptions.api_exception_handler",
 }
 

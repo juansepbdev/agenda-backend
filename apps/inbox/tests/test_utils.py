@@ -1,7 +1,6 @@
 """Funciones puras: teléfono, avatar y marcas de tiempo."""
 
-from datetime import datetime
-from datetime import timezone as dt_timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -53,11 +52,11 @@ def test_source_id_quita_el_mas():
 @pytest.mark.parametrize(
     ("raw", "expected"),
     [
-        ("2026-08-20T16:00:00.000Z", datetime(2026, 8, 20, 16, 0, tzinfo=dt_timezone.utc)),
-        ("2026-08-20T16:00:00+00:00", datetime(2026, 8, 20, 16, 0, tzinfo=dt_timezone.utc)),
-        ("2026-08-20T16:00:00", datetime(2026, 8, 20, 16, 0, tzinfo=dt_timezone.utc)),
-        (1755705600, datetime.fromtimestamp(1755705600, tz=dt_timezone.utc)),
-        ("1755705600", datetime.fromtimestamp(1755705600, tz=dt_timezone.utc)),
+        ("2026-08-20T16:00:00.000Z", datetime(2026, 8, 20, 16, 0, tzinfo=UTC)),
+        ("2026-08-20T16:00:00+00:00", datetime(2026, 8, 20, 16, 0, tzinfo=UTC)),
+        ("2026-08-20T16:00:00", datetime(2026, 8, 20, 16, 0, tzinfo=UTC)),
+        (1755705600, datetime.fromtimestamp(1755705600, tz=UTC)),
+        ("1755705600", datetime.fromtimestamp(1755705600, tz=UTC)),
     ],
 )
 def test_parse_wa_timestamp_formatos_conocidos(raw, expected):
