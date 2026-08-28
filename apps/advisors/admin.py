@@ -7,7 +7,15 @@ from .models import Advisor, AdvisorAvailability, AdvisorSupervision
 
 @admin.register(Advisor)
 class AdvisorAdmin(TenantAdminMixin, admin.ModelAdmin):
-    list_display = ("code", "user", "company", "is_active", "is_available", "accepts_automatic_assignments", "assignment_priority")
+    list_display = (
+        "code",
+        "user",
+        "company",
+        "is_active",
+        "is_available",
+        "accepts_automatic_assignments",
+        "assignment_priority",
+    )
     list_filter = ("company", "is_active", "is_available", "accepts_automatic_assignments")
     search_fields = ("code", "user__email", "user__first_name", "user__last_name")
     readonly_fields = ("id", "created_at", "updated_at")

@@ -3,8 +3,7 @@
 import colorsys
 import hashlib
 import re
-from datetime import datetime
-from datetime import timezone as dt_timezone
+from datetime import UTC, datetime
 
 from django.utils import timezone
 
@@ -54,14 +53,14 @@ def parse_wa_timestamp(value) -> datetime:
         return timezone.now()
 
     if isinstance(value, (int, float)):
-        return datetime.fromtimestamp(float(value), tz=dt_timezone.utc)
+        return datetime.fromtimestamp(float(value), tz=UTC)
 
     text = str(value).strip()
     if text.isdigit():
-        return datetime.fromtimestamp(int(text), tz=dt_timezone.utc)
+        return datetime.fromtimestamp(int(text), tz=UTC)
 
     try:
         parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
     except ValueError:
         return timezone.now()
-    return parsed if timezone.is_aware(parsed) else parsed.replace(tzinfo=dt_timezone.utc)
+    return parsed if timezone.is_aware(parsed) else parsed.replace(tzinfo=UTC)

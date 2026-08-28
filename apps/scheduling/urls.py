@@ -9,5 +9,11 @@ from .views import (
     calendar_week,
 )
 
-router=DefaultRouter(); router.register("events",EventViewSet,basename="event"); router.register("scheduling-configurations",SchedulingConfigurationViewSet,basename="scheduling-configuration")
-urlpatterns=router.urls+[path("calendar/day/",calendar_day),path("calendar/week/",calendar_week),path("calendar/month/",calendar_month)]
+router = DefaultRouter()
+router.register("events", EventViewSet, basename="event")
+router.register("scheduling-configurations", SchedulingConfigurationViewSet, basename="scheduling-configuration")
+urlpatterns = router.urls + [
+    path("calendar/day/", calendar_day),
+    path("calendar/week/", calendar_week),
+    path("calendar/month/", calendar_month),
+]
