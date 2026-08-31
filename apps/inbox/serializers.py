@@ -57,6 +57,13 @@ def serialize_message(message: Message) -> dict:
     }
 
 
+def _advisor_ref(advisor) -> dict | None:
+    """Referencia mínima del dueño: la lista solo pinta el nombre."""
+    if advisor is None:
+        return None
+    return {"id": str(advisor.id), "full_name": advisor.user.get_full_name() or advisor.user.email}
+
+
 def serialize_conversation(conversation: Conversation, *, include_contact: bool = True) -> dict:
     data = {
         "id": str(conversation.id),
@@ -66,6 +73,7 @@ def serialize_conversation(conversation: Conversation, *, include_contact: bool 
         "channel": conversation.channel,
         "status": conversation.status,
         "assignment": conversation.assignment,
+        "advisor": _advisor_ref(conversation.advisor),
         "unread_count": conversation.unread_count,
         "last_message_preview": conversation.last_message_preview,
         "last_activity_at": _iso(conversation.last_activity_at),
