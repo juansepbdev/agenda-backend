@@ -13,6 +13,24 @@ curl -u "admin@inmobiliaria.co:password" \
 
 Devuelve la empresa actual, por ejemplo `{"id":"uuid","name":"Inmobiliaria Norte","timezone":"America/Bogota","status":"ACTIVE"}`.
 
+## Seguimiento de leads
+
+Base `/api/v1/`. La cola se **deriva** al consultarla y ya viene recortada por rol: ADMIN toda la empresa, SUPERVISOR su equipo, ADVISOR solo los leads de sus propias citas. Los leads sin asesor (clientes inactivos y contactos del chatbot) solo los ven ADMIN y SUPERVISOR.
+
+| Recurso | Ruta | Uso |
+|---|---|---|
+| Cola | `GET /follow-ups/` | `?advisor=<uuid>`, `?reason=CANCELLED\|NO_SHOW\|COMPLETED\|INACTIVE`. Devuelve `{"results": [...], "count": n}` |
+| Decidir | `POST /follow-ups/decide/` | `{"phone", "status": "DONE\|DISMISSED\|SNOOZED", "due_at"?, "notes"?}`. `SNOOZED` exige `due_at` |
+| Enviar | `POST /follow-ups/send/` | `{"phone"}` |
+
+El **teléfono va en el cuerpo, nunca en la ruta**: el proxy valida cada segmento contra `^[A-Za-z0-9_-]+$` y el `+` de un teléfono lo haría fallar antes de llegar al backend.
+
+Cada lead trae `phone`, `name`, `reason`, `since` (desde cuándo espera), `client_id`, `contact_id`, `advisor` y `source_event_id`. `client_id` puede ser `null`: un contacto del chatbot todavía no tiene ficha de cliente.
+
+Detalle importante para la interfaz: sin plantilla de WhatsApp configurada en la empresa **no hay envío automático**, y cada lead queda marcado `skipped:sin-plantilla`. Enviar devuelve `message_status`, que puede ser `sent`, `failed:<motivo>` o `skipped:<motivo>` — un 200 no garantiza la entrega.
+
+Detalles completos en `agenda-backend/docs/follow_ups.md`.
+
 ## Permisos del usuario actual
 
 `GET /users/me/permissions/` devuelve las capacidades efectivas para construir el menú y habilitar acciones de la interfaz. El frontend debe usar este resultado para UX, pero el backend continúa validando los permisos en cada operación.

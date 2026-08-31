@@ -28,9 +28,17 @@ TOP_CONTACTS_LIMIT = 10
 
 
 def _messages(company, period: Period):
+    """Mensajes reales del periodo.
+
+    Los de sistema quedan fuera a propósito: son anotaciones del backend (un
+    seguimiento automático, una nota de reasignación), no conversación. Contarlos
+    inflaba `from_agent` y, peor, el emparejado de `response_times` tomaba una
+    anotación enviada semanas después de un entrante como si fuera la respuesta
+    del asesor a ese entrante.
+    """
     return Message.objects.filter(
         company=company, created_at__gte=period.start, created_at__lt=period.end
-    )
+    ).exclude(content_type=Message.ContentType.SYSTEM)
 
 
 # -----------------------------------------------------------------------------

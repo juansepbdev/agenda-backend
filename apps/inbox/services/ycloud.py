@@ -1,7 +1,11 @@
 """Salida a WhatsApp vía YCloud.
 
-Una sola función pública que **nunca lanza excepciones**: siempre devuelve la
-misma forma. El llamador persiste el resultado (R6).
+Funciones públicas que **nunca lanzan excepciones**: siempre devuelven la misma
+forma. El llamador persiste el resultado (R6).
+
+Dos formas de mensaje, porque WhatsApp impone dos: texto libre solo dentro de
+las 24 h siguientes al último mensaje del cliente, y **plantilla aprobada**
+fuera de esa ventana. Un seguimiento a semanas vista solo puede ser plantilla.
 """
 
 import logging
@@ -20,6 +24,41 @@ def _result(*, ok, error=None, wamid=None, raw=None, status_code=None) -> dict:
 
 
 def send_whatsapp_text(*, channel, to: str, body: str, from_number: str | None = None) -> dict:
+    """Texto libre. Solo llega dentro de la ventana de 24 h de WhatsApp."""
+    if not body:
+        return _result(ok=False, error="Cuerpo del mensaje vacío.")
+    return _send(
+        channel=channel,
+        to=to,
+        from_number=from_number,
+        content={"type": "text", "text": {"body": body}},
+    )
+
+
+def send_whatsapp_template(
+    *, channel, to: str, template: str, language: str = "es", variables=(), from_number: str | None = None
+) -> dict:
+    """Plantilla aprobada. Es la única forma de escribir fuera de las 24 h."""
+    if not template:
+        return _result(ok=False, error="Plantilla de WhatsApp no configurada.")
+
+    components = []
+    if variables:
+        components.append(
+            {"type": "body", "parameters": [{"type": "text", "text": str(value)} for value in variables]}
+        )
+    return _send(
+        channel=channel,
+        to=to,
+        from_number=from_number,
+        content={
+            "type": "template",
+            "template": {"name": template, "language": {"code": language}, "components": components},
+        },
+    )
+
+
+def _send(*, channel, to: str, from_number: str | None, content: dict) -> dict:
     """POST /whatsapp/messages. Cortocircuita sin gastar petición si falta config."""
     sender = from_number or (channel.ycloud_from if channel else "")
     api_key = channel.ycloud_api_key if channel else ""
@@ -30,13 +69,11 @@ def send_whatsapp_text(*, channel, to: str, body: str, from_number: str | None =
         return _result(ok=False, error="Número remitente de YCloud no configurado.")
     if not to:
         return _result(ok=False, error="Destinatario vacío.")
-    if not body:
-        return _result(ok=False, error="Cuerpo del mensaje vacío.")
 
     api_base = (channel.ycloud_api_base or getattr(settings, "INBOX_YCLOUD_API_BASE", DEFAULT_API_BASE)).rstrip("/")
     timeout = getattr(settings, "INBOX_YCLOUD_TIMEOUT", DEFAULT_TIMEOUT)
     url = f"{api_base}/whatsapp/messages"
-    payload = {"from": sender, "to": to, "type": "text", "text": {"body": body}}
+    payload = {"from": sender, "to": to, **content}
 
     try:
         response = requests.post(

@@ -2,6 +2,12 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "django",
   "buildCommand": "bash build_files.sh",
+  "crons": [
+    {
+      "path": "/api/v1/cron/follow-ups/",
+      "schedule": "0 13 * * *"
+    }
+  ],
   "functions": {
     "config/wsgi.py": {
       "maxDuration": 60

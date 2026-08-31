@@ -174,6 +174,13 @@ INBOX_YCLOUD_TIMEOUT = env.float("YCLOUD_TIMEOUT", default=30.0)
 # los eventos en vivo (Channels, Redis pub/sub, SSE...). Vacío = solo polling.
 INBOX_REALTIME_BACKEND = env("INBOX_REALTIME_BACKEND", default="")
 
+# -----------------------------------------------------------------------------
+# Cron de seguimientos
+# -----------------------------------------------------------------------------
+# Vercel manda `Authorization: Bearer <CRON_SECRET>` si la variable existe en el
+# proyecto. Vacío significa **denegar**, no "pasar sin credencial".
+CRON_SECRET = env("CRON_SECRET", default="")
+
 SPECTACULAR_SETTINGS = {
     "TITLE": "Agenda Inmobiliaria API",
     "DESCRIPTION": "API multiempresa de agenda inmobiliaria.",
