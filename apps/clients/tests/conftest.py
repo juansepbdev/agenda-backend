@@ -31,9 +31,7 @@ def make_advisor(company, email, code, *, role=User.Role.ADVISOR):
 
 
 def make_client(company, *, phone, first_name="Lead", **kwargs):
-    return Client.objects.create(
-        company=company, first_name=first_name, phone=phone, normalized_phone=phone, **kwargs
-    )
+    return Client.objects.create(company=company, first_name=first_name, phone=phone, normalized_phone=phone, **kwargs)
 
 
 def make_event(*, company, advisor, client, status, days_ago=None, days_ahead=None, minutes=60):
@@ -99,9 +97,7 @@ def other_advisor(company):
 
 @pytest.fixture
 def supervisor_user(company, advisor, admin_user):
-    user = User.objects.create_user(
-        email="supervisor@a.co", password="x", company=company, role=User.Role.SUPERVISOR
-    )
+    user = User.objects.create_user(email="supervisor@a.co", password="x", company=company, role=User.Role.SUPERVISOR)
     AdvisorSupervision.objects.create(
         company=company,
         supervisor_user=user,
@@ -114,9 +110,7 @@ def supervisor_user(company, advisor, admin_user):
 
 @pytest.fixture
 def channel(company):
-    return WhatsAppChannel.objects.create(
-        company=company, ycloud_api_key="key-demo", ycloud_from="+573001111111"
-    )
+    return WhatsAppChannel.objects.create(company=company, ycloud_api_key="key-demo", ycloud_from="+573001111111")
 
 
 @pytest.fixture

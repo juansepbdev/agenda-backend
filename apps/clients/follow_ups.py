@@ -48,9 +48,7 @@ def record_decision(*, company, candidate=None, phone, status, actor=None, **fie
             advisor=candidate.advisor,
         )
 
-    follow_up, created = FollowUp.objects.update_or_create(
-        company=company, normalized_phone=phone, defaults=defaults
-    )
+    follow_up, created = FollowUp.objects.update_or_create(company=company, normalized_phone=phone, defaults=defaults)
     if created and actor is not None:
         FollowUp.objects.filter(pk=follow_up.pk).update(created_by=actor)
     return follow_up
@@ -143,6 +141,7 @@ def dispatch_company(*, company, limit=MAX_SENDS_PER_RUN, dry_run=False) -> dict
 # Piezas internas
 # -----------------------------------------------------------------------------
 
+
 def _claim(*, company, candidate, configuration, now, actor) -> bool:
     """Reclama el lead para este envío. `False` si ya estaba reclamado."""
     cooldown_start = now - timedelta(days=configuration.follow_up_cooldown_days)
@@ -167,14 +166,18 @@ def _claim(*, company, candidate, configuration, now, actor) -> bool:
         # El `UPDATE` condicional es el candado: si devuelve 0 filas, otra
         # ejecución se adelantó dentro del enfriamiento.
         stale = Q(sent_at__isnull=True) | Q(sent_at__lte=cooldown_start)
-        claimed = FollowUp.objects.filter(pk=follow_up.pk).filter(stale).update(
-            status=FollowUp.Status.SENT,
-            reason=candidate.reason,
-            client=candidate.client,
-            contact=candidate.contact,
-            advisor=candidate.advisor,
-            sent_at=now,
-            updated_at=now,
+        claimed = (
+            FollowUp.objects.filter(pk=follow_up.pk)
+            .filter(stale)
+            .update(
+                status=FollowUp.Status.SENT,
+                reason=candidate.reason,
+                client=candidate.client,
+                contact=candidate.contact,
+                advisor=candidate.advisor,
+                sent_at=now,
+                updated_at=now,
+            )
         )
         return bool(claimed)
 
@@ -190,8 +193,4 @@ def _dispatcher(company):
     """Usuario en cuyo nombre se deriva la cola: hace falta uno que lo vea todo."""
     from apps.users.models import User
 
-    return (
-        User.objects.filter(company=company, role=User.Role.ADMIN, is_active=True)
-        .order_by("created_at")
-        .first()
-    )
+    return User.objects.filter(company=company, role=User.Role.ADMIN, is_active=True).order_by("created_at").first()

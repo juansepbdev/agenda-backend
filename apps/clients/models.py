@@ -41,7 +41,6 @@ class Client(CompanyOwnedModel):
         return f"{self.first_name} {self.last_name}".strip()
 
 
-
 class FollowUp(CompanyOwnedModel):
     """El seguimiento vigente de un lead. Una fila por lead, no un histórico.
 
@@ -69,9 +68,7 @@ class FollowUp(CompanyOwnedModel):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     normalized_phone = models.CharField(max_length=32)
-    client = models.ForeignKey(
-        Client, null=True, blank=True, on_delete=models.SET_NULL, related_name="follow_ups"
-    )
+    client = models.ForeignKey(Client, null=True, blank=True, on_delete=models.SET_NULL, related_name="follow_ups")
     contact = models.ForeignKey(
         "inbox.Contact", null=True, blank=True, on_delete=models.SET_NULL, related_name="follow_ups"
     )
@@ -99,9 +96,7 @@ class FollowUp(CompanyOwnedModel):
             # Es el candado del envío automático: reclamar la fila con un UPDATE
             # condicional antes de enviar hace imposible el mensaje duplicado,
             # aunque el cron se ejecute dos veces.
-            models.UniqueConstraint(
-                fields=["company", "normalized_phone"], name="unique_follow_up_per_lead"
-            )
+            models.UniqueConstraint(fields=["company", "normalized_phone"], name="unique_follow_up_per_lead")
         ]
         indexes = [models.Index(fields=["company", "advisor", "due_at"])]
 

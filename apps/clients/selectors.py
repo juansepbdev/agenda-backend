@@ -62,9 +62,7 @@ class FollowUpCandidate:
 
 def get_configuration(company):
     """Configuración por defecto de la empresa, o una sin guardar con los defaults."""
-    configuration = SchedulingConfiguration.objects.filter(
-        company=company, is_default=True, is_active=True
-    ).first()
+    configuration = SchedulingConfiguration.objects.filter(company=company, is_default=True, is_active=True).first()
     return configuration or SchedulingConfiguration(company=company)
 
 
@@ -97,6 +95,7 @@ def follow_ups_due(*, user, at=None) -> list[FollowUpCandidate]:
 # -----------------------------------------------------------------------------
 # Los tres orígenes
 # -----------------------------------------------------------------------------
+
 
 def _from_events(*, user, at, configuration) -> list[FollowUpCandidate]:
     """Citas sin cierre: la última del cliente terminó mal o sin concretar."""
@@ -192,6 +191,7 @@ def _chatbot_contacts(*, company, at, configuration, exclude) -> list[FollowUpCa
 # -----------------------------------------------------------------------------
 # Lo que sale de la cola
 # -----------------------------------------------------------------------------
+
 
 def _without_decided(*, company, at, configuration, candidates) -> list[FollowUpCandidate]:
     """Quita los leads sobre los que ya se decidió algo que sigue vigente.

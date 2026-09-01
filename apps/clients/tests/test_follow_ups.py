@@ -31,6 +31,7 @@ def phones(candidates):
 # Quién entra en la cola
 # -----------------------------------------------------------------------------
 
+
 @pytest.mark.parametrize(
     ("status", "reason"),
     [
@@ -94,6 +95,7 @@ def test_la_funcionalidad_se_puede_apagar_por_empresa(admin_user, company, advis
 # Quién ve qué
 # -----------------------------------------------------------------------------
 
+
 def test_un_asesor_solo_ve_sus_leads(advisor_api, company, advisor, other_advisor, configuration):
     mine = make_client(company, phone="+573001111111", first_name="Mío")
     theirs = make_client(company, phone="+573002222222", first_name="Ajeno")
@@ -130,6 +132,7 @@ def test_ninguna_empresa_ve_los_leads_de_la_otra(admin_user, other_company, conf
 # -----------------------------------------------------------------------------
 # Lo que saca un lead de la cola
 # -----------------------------------------------------------------------------
+
 
 def test_descartar_saca_el_lead_de_la_cola(api, admin_user, company, advisor, configuration):
     client = make_client(company, phone="+573001112233")
@@ -189,6 +192,7 @@ def test_una_cita_nueva_resucita_un_lead_descartado(admin_user, company, advisor
 # El envío
 # -----------------------------------------------------------------------------
 
+
 def _configure_template(configuration):
     configuration.follow_up_template = "seguimiento_lead"
     configuration.save(update_fields=["follow_up_template"])
@@ -209,9 +213,7 @@ def test_dos_despachos_seguidos_envian_una_sola_vez(admin_user, company, advisor
 def test_el_envio_no_le_roba_la_conversacion_al_asesor(admin_user, company, advisor, configuration, channel, contact):
     """Un seguimiento es una anotación del sistema, no un mensaje del asesor."""
     _configure_template(configuration)
-    conversation = Conversation.objects.create(
-        company=company, contact=contact, assignment=Conversation.Assignment.ME
-    )
+    conversation = Conversation.objects.create(company=company, contact=contact, assignment=Conversation.Assignment.ME)
 
     service.dispatch_company(company=company)
 
@@ -232,7 +234,9 @@ def test_el_envio_funciona_aunque_el_chatbot_este_encendido(admin_user, company,
     assert FollowUp.objects.get(company=company).message_status == "sent"
 
 
-def test_sin_plantilla_no_se_envia_pero_queda_escrito_por_que(admin_user, company, configuration, channel, contact, fake_ycloud):
+def test_sin_plantilla_no_se_envia_pero_queda_escrito_por_que(
+    admin_user, company, configuration, channel, contact, fake_ycloud
+):
     result = service.dispatch_company(company=company)
 
     # Se cuenta como omitido, no como enviado: el informe no puede mentir.
@@ -254,6 +258,7 @@ def test_dry_run_cuenta_pero_no_envia(admin_user, company, configuration, channe
 # -----------------------------------------------------------------------------
 # El cron
 # -----------------------------------------------------------------------------
+
 
 def test_el_cron_sin_credencial_responde_401(client, settings, admin_user, company, configuration):
     settings.CRON_SECRET = "s3creto"

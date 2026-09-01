@@ -35,8 +35,7 @@ class Command(BaseCommand):
             result = dispatch_company(company=company, limit=options["limit"], dry_run=options["dry_run"])
             total += result["sent"]
             detail = result.get("skipped") or (
-                f"{result['sent']} enviados, {result.get('skipped_sends', 0)} omitidos, "
-                f"{result['pending']} en espera"
+                f"{result['sent']} enviados, {result.get('skipped_sends', 0)} omitidos, {result['pending']} en espera"
             )
             self.stdout.write(f"  {company.slug:<20} {detail}")
 
