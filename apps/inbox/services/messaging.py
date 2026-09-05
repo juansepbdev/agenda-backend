@@ -15,15 +15,18 @@ from apps.clients.models import Client
 from apps.scheduling.exceptions import DomainError
 
 from ..exceptions import (
+    AdvisorNotAssignableError,
     ChatbotEnabledError,
     ContactNotFoundError,
     ConversationNotFoundError,
     InboxValidationError,
 )
 from ..models import Contact, Conversation, Message
+from ..selectors import advisors_assignable_by, conversations_visible_to_user
 from ..serializers import serialize_contact, serialize_conversation, serialize_message
 from ..utils import normalize_phone, parse_wa_timestamp
 from . import n8n, realtime, ycloud
+from .assignment import pick_advisor
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +36,8 @@ DEFAULT_PAGE_LIMIT = 50
 MAX_PAGE_LIMIT = 200
 
 CONVERSATION_FILTERS = {"all", "me", "unassigned", "bot"}
+# Valor de `?advisor=` que pide las conversaciones sin dueño.
+UNASSIGNED_ADVISOR = "none"
 
 
 # -----------------------------------------------------------------------------
@@ -163,7 +168,16 @@ def get_or_create_open_conversation(contact: Contact, *, channel=None) -> Conver
         return conversation
 
     inbox_name = channel.inbox_name if channel else Conversation._meta.get_field("inbox").get_default()
-    return Conversation.objects.create(company_id=contact.company_id, contact=contact, inbox=inbox_name)
+    # Reparto automático al nacer la conversación: es el único punto por el que
+    # nace una. Sin asesores elegibles queda sin dueño, en la bandeja que ven
+    # administración y supervisión; nunca se lanza desde aquí, porque este
+    # camino lo recorre el webhook entrante.
+    return Conversation.objects.create(
+        company_id=contact.company_id,
+        contact=contact,
+        inbox=inbox_name,
+        advisor=pick_advisor(company=contact.company),
+    )
 
 
 def _last_message_id(conversation: Conversation) -> int:
@@ -306,21 +320,15 @@ def _dispatch_outbound(*, channel, contact: Contact, message: Message, conversat
     return result
 
 
-def send_agent_message(*, company, conversation_id, content: str, channel=None) -> dict:
+def send_agent_message(*, user, conversation_id, content: str, channel=None) -> dict:
     """Envío del asesor. Lanza `ChatbotEnabledError` si el chatbot está encendido (R1)."""
     body = (content or "").strip()
     if not body:
         raise InboxValidationError("El contenido del mensaje es obligatorio.")
 
     with transaction.atomic():
-        conversation = (
-            Conversation.objects.select_related("contact")
-            .filter(company=company, pk=conversation_id)
-            .first()
-        )
-        if conversation is None:
-            raise ConversationNotFoundError("La conversación no existe.")
-
+        conversation = _get_visible_conversation(user, conversation_id)
+        company = conversation.company
         contact = conversation.contact
         if contact.chatbot_enabled:
             raise ChatbotEnabledError("El chatbot está encendido; apágalo para responder manualmente.")
@@ -423,10 +431,14 @@ def send_bot_reply_from_n8n(*, company, phone, text, channel=None, message_id=No
 # Interruptor, listados y lectura
 # -----------------------------------------------------------------------------
 
-def set_chatbot_enabled(*, company, contact_id, enabled: bool) -> dict:
-    contact = Contact.objects.filter(company=company, pk=contact_id).first()
+def set_chatbot_enabled(*, user, contact_id, enabled: bool) -> dict:
+    # El contacto se acota por las conversaciones visibles: sin eso, un asesor
+    # podría apagarle el bot a un contacto de otro asesor conociendo su id.
+    visible = conversations_visible_to_user(user=user).filter(contact_id=contact_id)
+    contact = Contact.objects.filter(pk=contact_id).filter(conversations__in=visible).first()
     if contact is None:
         raise ContactNotFoundError("El contacto no existe.")
+    company = contact.company
 
     contact.chatbot_enabled = bool(enabled)
     contact.save(update_fields=["chatbot_enabled", "updated_at"])
@@ -436,19 +448,87 @@ def set_chatbot_enabled(*, company, contact_id, enabled: bool) -> dict:
     return {"contact_id": str(contact.id), "chatbot_enabled": contact.chatbot_enabled, "contact": contact_data}
 
 
-def list_conversations(*, company, filter_id: str = "all") -> list[dict]:
+def claim_conversation(*, user, conversation_id, advisor_id=None) -> dict:
+    """Tomar (o reasignar) una conversación: apaga el bot y le pone dueño.
+
+    Es una sola acción a propósito: responder con el bot encendido devuelve 403
+    (R1), así que separar "asignar" de "apagar el bot" solo serviría para dejar
+    al asesor a medio camino.
+    """
+    conversation = _get_visible_conversation(user, conversation_id)
+
+    if advisor_id:
+        advisor = advisors_assignable_by(user).filter(pk=advisor_id).first()
+        if advisor is None:
+            raise AdvisorNotAssignableError("Ese asesor no existe o no está a tu alcance.")
+    else:
+        advisor = getattr(user, "advisor", None)
+        if advisor is None:
+            raise AdvisorNotAssignableError("No eres asesor: indica `advisor_id` para asignar la conversación.")
+
+    contact = conversation.contact
+    with transaction.atomic():
+        Conversation.objects.filter(pk=conversation.pk).update(
+            advisor=advisor, assignment=Conversation.Assignment.ME, updated_at=timezone.now()
+        )
+        if contact.chatbot_enabled:
+            contact.chatbot_enabled = False
+            contact.save(update_fields=["chatbot_enabled", "updated_at"])
+
+    conversation.refresh_from_db(fields=["advisor", "assignment", "updated_at"])
+    realtime.broadcast_conversations_changed(company_id=conversation.company_id)
+    return {
+        "conversation": serialize_conversation(conversation),
+        "contact": serialize_contact(contact),
+    }
+
+
+def release_conversation(*, user, conversation_id) -> dict:
+    """Devolver la conversación al chatbot. El dueño se conserva."""
+    conversation = _get_visible_conversation(user, conversation_id)
+    contact = conversation.contact
+
+    with transaction.atomic():
+        Conversation.objects.filter(pk=conversation.pk).update(
+            assignment=Conversation.Assignment.BOT, updated_at=timezone.now()
+        )
+        if not contact.chatbot_enabled:
+            contact.chatbot_enabled = True
+            contact.save(update_fields=["chatbot_enabled", "updated_at"])
+
+    conversation.refresh_from_db(fields=["assignment", "updated_at"])
+    realtime.broadcast_conversations_changed(company_id=conversation.company_id)
+    return {
+        "conversation": serialize_conversation(conversation),
+        "contact": serialize_contact(contact),
+    }
+
+
+def list_conversations(*, user, filter_id: str = "all", advisor_id=None) -> list[dict]:
     if filter_id not in CONVERSATION_FILTERS:
         filter_id = "all"
 
-    queryset = (
-        Conversation.objects.select_related("contact")
-        .filter(company=company)
-        .order_by("-last_activity_at", "-created_at")
-    )
+    queryset = conversations_visible_to_user(user=user).order_by("-last_activity_at", "-created_at")
     if filter_id != "all":
         queryset = queryset.filter(assignment=filter_id)
+    if advisor_id == UNASSIGNED_ADVISOR:
+        queryset = queryset.filter(advisor__isnull=True)
+    elif advisor_id:
+        queryset = queryset.filter(advisor_id=advisor_id)
 
     return [serialize_conversation(conversation) for conversation in queryset]
+
+
+def _get_visible_conversation(user, conversation_id) -> Conversation:
+    """Conversación dentro del alcance del usuario, o 404.
+
+    `_get_conversation` sigue siendo la vía de las rutas máquina-a-máquina, que
+    resuelven la empresa desde la credencial del canal y no tienen usuario.
+    """
+    conversation = conversations_visible_to_user(user=user).filter(pk=conversation_id).first()
+    if conversation is None:
+        raise ConversationNotFoundError("La conversación no existe.")
+    return conversation
 
 
 def _get_conversation(company, conversation_id) -> Conversation:
@@ -460,9 +540,9 @@ def _get_conversation(company, conversation_id) -> Conversation:
     return conversation
 
 
-def list_messages(*, company, conversation_id, limit=None, after_id=None, before_id=None) -> list[dict]:
+def list_messages(*, user, conversation_id, limit=None, after_id=None, before_id=None) -> list[dict]:
     """Paginación por cursor, sin OFFSET. Siempre devuelve orden cronológico ascendente."""
-    conversation = _get_conversation(company, conversation_id)
+    conversation = _get_visible_conversation(user, conversation_id)
     # `limit=0` se acota a 1, no cae al default: 0 es un valor dado, no la ausencia de valor.
     limit = DEFAULT_PAGE_LIMIT if limit is None else limit
     limit = max(1, min(limit, MAX_PAGE_LIMIT))
@@ -478,9 +558,9 @@ def list_messages(*, company, conversation_id, limit=None, after_id=None, before
     return [serialize_message(message) for message in messages]
 
 
-def get_conversation_payload(*, company, conversation_id, mark_read: bool = True) -> dict:
+def get_conversation_payload(*, user, conversation_id, mark_read: bool = True) -> dict:
     """Carga inicial de un chat. Con `mark_read`, pone `unread_count` a 0 (R4)."""
-    conversation = _get_conversation(company, conversation_id)
+    conversation = _get_visible_conversation(user, conversation_id)
 
     if mark_read and conversation.unread_count:
         # UPDATE dirigido: no toca `last_activity_at` ni `updated_at`, para que

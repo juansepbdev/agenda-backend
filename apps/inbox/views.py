@@ -112,15 +112,20 @@ def _payload(request):
 # -----------------------------------------------------------------------------
 
 @extend_schema(
-    summary="Lista de conversaciones ordenada por actividad descendente.",
-    parameters=[OpenApiParameter("filter", str, description="all | me | unassigned | bot")],
+    summary="Conversaciones visibles para el usuario, por actividad descendente.",
+    parameters=[
+        OpenApiParameter("filter", str, description="all | me | unassigned | bot"),
+        OpenApiParameter("advisor", str, description="UUID del asesor dueño, o `none` para las sin asignar."),
+    ],
     responses=OpenApiTypes.OBJECT,
 )
 @api_view(["GET"])
 def conversation_list(request):
-    company = _company(request)
+    """El alcance lo decide el rol (R8): un asesor solo ve las suyas."""
     conversations = messaging.list_conversations(
-        company=company, filter_id=request.query_params.get("filter", "all")
+        user=request.user,
+        filter_id=request.query_params.get("filter", "all"),
+        advisor_id=request.query_params.get("advisor"),
     )
     return Response({"conversations": conversations})
 
@@ -132,8 +137,7 @@ def conversation_list(request):
 @api_view(["GET"])
 def conversation_detail(request, conversation_id):
     """Carga inicial de un chat. Efecto secundario: pone `unread_count` a 0 (R4)."""
-    company = _company(request)
-    return Response(messaging.get_conversation_payload(company=company, conversation_id=conversation_id))
+    return Response(messaging.get_conversation_payload(user=request.user, conversation_id=conversation_id))
 
 
 @extend_schema(
@@ -152,7 +156,7 @@ def conversation_messages(request, conversation_id):
 
     if request.method == "GET":
         messages = messaging.list_messages(
-            company=company,
+            user=request.user,
             conversation_id=conversation_id,
             limit=_int_param(request, "limit"),
             after_id=_int_param(request, "after_id"),
@@ -165,7 +169,7 @@ def conversation_messages(request, conversation_id):
 
     data = _payload(request)
     result = messaging.send_agent_message(
-        company=company,
+        user=request.user,
         conversation_id=conversation_id,
         content=data.get("content", ""),
         channel=_channel_of(company),
@@ -181,13 +185,38 @@ def conversation_messages(request, conversation_id):
 @api_view(["POST"])
 def contact_chatbot(request, contact_id):
     """Interruptor del bot por contacto (R1)."""
-    company = _company(request)
     data = _payload(request)
     if "enabled" not in data:
         raise InboxValidationError("El campo `enabled` es obligatorio.")
     return Response(
-        messaging.set_chatbot_enabled(company=company, contact_id=contact_id, enabled=bool(data["enabled"]))
+        messaging.set_chatbot_enabled(user=request.user, contact_id=contact_id, enabled=bool(data["enabled"]))
     )
+
+
+@extend_schema(
+    summary="Toma o reasigna la conversación: apaga el chatbot y le pone dueño.",
+    request=OpenApiTypes.OBJECT,
+    responses=OpenApiTypes.OBJECT,
+)
+@api_view(["POST"])
+def conversation_claim(request, conversation_id):
+    """Sin `advisor_id` se la queda quien llama; con él, reasigna (admin/supervisión)."""
+    return Response(
+        messaging.claim_conversation(
+            user=request.user,
+            conversation_id=conversation_id,
+            advisor_id=_payload(request).get("advisor_id"),
+        )
+    )
+
+
+@extend_schema(
+    summary="Devuelve la conversación al chatbot.",
+    responses=OpenApiTypes.OBJECT,
+)
+@api_view(["POST"])
+def conversation_release(request, conversation_id):
+    return Response(messaging.release_conversation(user=request.user, conversation_id=conversation_id))
 
 
 @extend_schema(

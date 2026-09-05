@@ -33,3 +33,10 @@ class InvalidWebhookCredentialError(DomainError):
 class InboxValidationError(DomainError):
     code = "INBOX_VALIDATION_ERROR"
     status_code = 400
+
+
+class AdvisorNotAssignableError(DomainError):
+    """El asesor destino no existe, no es de la empresa o no está a tu alcance."""
+
+    code = "ADVISOR_NOT_ASSIGNABLE"
+    status_code = 404
