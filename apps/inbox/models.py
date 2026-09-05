@@ -195,6 +195,17 @@ class Conversation(CompanyOwnedModel):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     contact = models.ForeignKey(Contact, on_delete=models.CASCADE, related_name="conversations")
+    # Dueño de la conversación. `assignment` dice *quién responde ahora* (bot o
+    # humano); esto dice *de quién es*, que es lo que decide qué ve cada asesor.
+    # ponytail: sin autoría por mensaje; añadir `Message.sent_by` cuando varios
+    # asesores puedan escribir en el mismo hilo.
+    advisor = models.ForeignKey(
+        "advisors.Advisor",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="conversations",
+    )
     display_id = models.PositiveIntegerField(null=True, blank=True)
     inbox = models.CharField(max_length=128, default=DEFAULT_INBOX_NAME)
     channel = models.CharField(max_length=32, default="whatsapp")
@@ -211,6 +222,7 @@ class Conversation(CompanyOwnedModel):
         indexes = [
             models.Index(fields=["company", "-last_activity_at"]),
             models.Index(fields=["company", "assignment"]),
+            models.Index(fields=["company", "advisor", "-last_activity_at"]),
             models.Index(fields=["contact", "status"]),
         ]
 
