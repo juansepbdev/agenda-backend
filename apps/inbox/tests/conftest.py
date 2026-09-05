@@ -113,3 +113,65 @@ def webhook(channel):
 
     _post.client = client
     return _post
+
+
+# -----------------------------------------------------------------------------
+# Asesores, supervisión y sus clientes autenticados (scoping por rol, R8)
+# -----------------------------------------------------------------------------
+
+def make_advisor(company, *, email, code, role=User.Role.ADVISOR, **kwargs):
+    from apps.advisors.models import Advisor
+
+    user = User.objects.create_user(email=email, password="x", company=company, role=role)
+    return Advisor.objects.create(company=company, user=user, code=code, **kwargs)
+
+
+@pytest.fixture
+def advisor(company):
+    return make_advisor(company, email="ana@demo.co", code="ASE-001")
+
+
+@pytest.fixture
+def other_advisor(company):
+    return make_advisor(company, email="bruno@demo.co", code="ASE-002")
+
+
+@pytest.fixture
+def supervisor(company, advisor, user):
+    """Supervisa a `advisor` y a nadie más."""
+    from django.utils import timezone
+
+    from apps.advisors.models import AdvisorSupervision
+
+    supervisor_user = User.objects.create_user(
+        email="super@demo.co", password="x", company=company, role=User.Role.SUPERVISOR
+    )
+    AdvisorSupervision.objects.create(
+        company=company,
+        supervisor_user=supervisor_user,
+        advisor=advisor,
+        assigned_by=user,
+        valid_from=timezone.localdate(),
+    )
+    return supervisor_user
+
+
+def authenticated(user):
+    client = APIClient()
+    client.force_authenticate(user=user)
+    return client
+
+
+@pytest.fixture
+def advisor_api(advisor):
+    return authenticated(advisor.user)
+
+
+@pytest.fixture
+def other_advisor_api(other_advisor):
+    return authenticated(other_advisor.user)
+
+
+@pytest.fixture
+def supervisor_api(supervisor):
+    return authenticated(supervisor)

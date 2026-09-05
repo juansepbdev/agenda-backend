@@ -11,7 +11,7 @@ La base de datos es la única fuente de verdad. El backend **nunca genera respue
 - **`WhatsAppChannel`** — configuración por empresa (API key y número de YCloud, URL de n8n, `verify_token`) y credencial del webhook. Reemplaza las variables de entorno globales de la referencia.
 - **`ConversationSequence`** — contador atómico de `display_id` por empresa, bloqueado con `SELECT ... FOR UPDATE`. Sustituye al `MAX(display_id) + 1` de la referencia, que compite consigo mismo bajo webhooks concurrentes.
 - **`Contact`** — clave natural `(company, phone_number)` con el teléfono normalizado a `+<dígitos>`. `chatbot_enabled` es el interruptor de negocio central. `client` es un FK opcional a `clients.Client`: se enlaza automáticamente cuando el teléfono normalizado coincide, de modo que una conversación de WhatsApp puede derivar en un evento de agenda.
-- **`Conversation`** — `display_id` único por empresa, `status` (`open`/`resolved`/`pending`), `assignment` (`unassigned`/`me`/`bot`), `unread_count`, y `last_activity_at` como clave de ordenamiento.
+- **`Conversation`** — `display_id` único por empresa, `status` (`open`/`resolved`/`pending`), `assignment` (`unassigned`/`me`/`bot`), `unread_count`, y `last_activity_at` como clave de ordenamiento. **`advisor`** es el dueño de la conversación: `assignment` dice *quién responde ahora* (bot o humano), `advisor` dice *de quién es*, y es lo que decide qué ve cada asesor (R8).
 - **`Message`** — entrantes y salientes en una sola tabla, diferenciados por `message_type` (`0` entrante, `1` saliente). Es el **único modelo con PK entera**: el contrato de paginación por cursor exige identificadores monótonos y el índice caliente es `(conversation, id DESC)`. `wa_message_id` es único por empresa y sostiene la idempotencia.
 
 ## Reglas de negocio
@@ -25,6 +25,7 @@ La base de datos es la única fuente de verdad. El backend **nunca genera respue
 | **R5** | Los eventos en vivo llevan punteros, nunca el contenido del mensaje; el cliente re-consulta por REST. |
 | **R6** | El envío a YCloud ocurre **fuera** de la transacción y su resultado se persiste: éxito → `sent` + `wamid`; fallo → `failed`. La petición del cliente responde 2xx igual, con `ycloud_ok: false`. |
 | **R7** | Un único `POST` a n8n por payload de webhook, con el JSON crudo sin transformar, y solo si n8n está configurado **y** el contacto tiene el chatbot encendido **y** el mensaje no es duplicado. |
+| **R8** | Visibilidad por rol, igual que la agenda: ADMIN ve todas las de su empresa, SUPERVISOR las de sus supervisados y las sin asignar, ADVISOR solo las suyas. Fuera de alcance se responde **404**, no 403. Al nacer, la conversación se asigna al asesor elegible con menos conversaciones abiertas; sin candidatos queda sin dueño y el mensaje se guarda igual. |
 
 ## Endpoints
 
@@ -32,17 +33,19 @@ Base `/api/v1/inbox/`. Los internos exigen sesión y resuelven la empresa desde 
 
 | Método | Ruta | Notas |
 | --- | --- | --- |
-| `GET` | `conversations/` | `?filter=all\|me\|unassigned\|bot`. Orden por actividad descendente |
+| `GET` | `conversations/` | `?filter=all\|me\|unassigned\|bot` y `?advisor=<uuid>\|none`. Orden por actividad descendente. Recortado por rol (R8) |
 | `GET` | `conversations/<uuid>/` | Conversación + últimos 100 mensajes + contacto. Limpia `unread_count` |
 | `GET` | `conversations/<uuid>/messages/` | Cursor: `limit` (1..200, def. 50), `after_id`, `before_id`. Siempre devuelve orden ascendente |
 | `POST` | `conversations/<uuid>/messages/` | Envío del asesor. `{"content": "..."}` → `201` |
-| `POST` | `contacts/<uuid>/chatbot/` | `{"enabled": bool}` |
+| `POST` | `conversations/<uuid>/claim/` | Tomar o reasignar: apaga el chatbot y pone dueño. Cuerpo opcional `{"advisor_id": "<uuid>"}` |
+| `POST` | `conversations/<uuid>/release/` | Devolver al chatbot. Conserva el dueño |
+| `POST` | `contacts/<uuid>/chatbot/` | `{"enabled": bool}`. Acotado a los contactos con conversación visible |
 | `POST` | `messages/` | **Guardar mensajes** en el historial. Sesión o `X-API-Key`. No envía por WhatsApp |
 | `POST` | `messages/incoming/` | Ingesta manual de pruebas. **No reenvía a n8n** |
 | `GET`/`POST` | `webhook/whatsapp/` | Webhook de YCloud. Sin sesión, credencial de canal |
 | `POST` | `n8n/bot-reply/` | Callback del bot. Sin sesión, credencial de canal |
 
-Los errores usan el envoltorio del resto de la API: `{"error": {"code", "message", "details"}}`. Códigos propios: `CHATBOT_ENABLED` (403), `CONVERSATION_NOT_FOUND` / `CONTACT_NOT_FOUND` (404), `INVALID_WEBHOOK_CREDENTIAL` (401), `INBOX_VALIDATION_ERROR` (400).
+Los errores usan el envoltorio del resto de la API: `{"error": {"code", "message", "details"}}`. Códigos propios: `CHATBOT_ENABLED` (403), `CONVERSATION_NOT_FOUND` / `CONTACT_NOT_FOUND` / `ADVISOR_NOT_ASSIGNABLE` (404), `INVALID_WEBHOOK_CREDENTIAL` (401), `INBOX_VALIDATION_ERROR` (400).
 
 Con la credencial válida, el webhook **siempre responde 200**, incluso si el payload no era procesable (`status: "ignored"`): un error provoca reintentos innecesarios del BSP.
 
