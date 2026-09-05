@@ -32,6 +32,25 @@ class SchedulingConfiguration(CompanyOwnedModel):
     allow_supervisor_reassign_events = models.BooleanField(default=True)
     allow_supervisor_edit_availability = models.BooleanField(default=True)
     reminder_minutes_before = models.PositiveIntegerField(default=60)
+
+    # Seguimiento de leads. Los plazos se aplican como `timedelta` sobre
+    # instantes, así que no dependen de la zona horaria de la empresa.
+    follow_up_enabled = models.BooleanField(default=True)
+    follow_up_after_cancelled_days = models.PositiveIntegerField(default=7)
+    follow_up_after_no_show_days = models.PositiveIntegerField(default=3)
+    follow_up_after_completed_days = models.PositiveIntegerField(default=30)
+    follow_up_inactive_days = models.PositiveIntegerField(default=60)
+    # Ventana durante la que no se vuelve a escribir al mismo lead. Es lo que
+    # hace idempotente el envío diario, y de paso lo que evita el spam.
+    follow_up_cooldown_days = models.PositiveIntegerField(default=30)
+    # Plantilla aprobada de WhatsApp. Un seguimiento a semanas vista cae fuera
+    # de la ventana de 24 h y el texto libre sería rechazado por Meta; sin
+    # plantilla configurada no se envía nada, pero la cola sigue viéndose.
+    # Vive aquí y no en `inbox.WhatsAppChannel` para no añadir una migración a
+    # `apps.inbox`, que ahora mismo tiene otra rama abierta encima.
+    follow_up_template = models.CharField(max_length=128, blank=True)
+    follow_up_template_language = models.CharField(max_length=12, default="es")
+
     timezone = models.CharField(max_length=64, default="America/Bogota")
     is_default = models.BooleanField(default=True)
     is_active = models.BooleanField(default=True)
@@ -156,6 +175,7 @@ class Event(CompanyOwnedModel):
         ]
         indexes = [
             models.Index(fields=["company", "advisor", "start_at"]),
+            models.Index(fields=["company", "client", "start_at"]),
             models.Index(fields=["company", "status", "start_at"]),
         ]
 
